@@ -1,0 +1,43 @@
+name: Update QuickTickets Afisha
+
+on:
+  schedule:
+    # Запуск каждый час (по UTC)
+    - cron: '0 * * * *'
+  workflow_dispatch: # Позволяет запускать вручную кнопкой для теста
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  fetch-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch QuickTickets Events API
+        run: |
+          curl -s -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationAlias=noyabrsk-ckii-neftyanik" \
+               -o events.json
+          
+          # Проверяем, что файл скачался и не пустой
+          if [ ! -s events.json ]; then
+            echo "Error: events.json is empty"
+            exit 1
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
