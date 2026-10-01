@@ -2,7 +2,6 @@ name: Update QuickTickets Afisha
 
 on:
   schedule:
-    # Запуск каждый час
     - cron: '0 * * * *'
   workflow_dispatch:
 
@@ -18,25 +17,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Fetch QuickTickets Events API
+      - name: Fetch and Merge QuickTickets Events
         env:
           QT_TOKEN: ${{ secrets.QT_API_TOKEN }}
         run: |
+          # 1. Скачиваем репертуар «Нефтяника»
           curl -s -H "Authorization: Bearer $QT_TOKEN" \
                -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
                "https://api2.quicktickets.ru/afisha/v2/event/list?organisationAlias=noyabrsk-ckii-neftyanik" \
-               -o events.json
-          
-          # Выводим в лог первые 300 символов ответа для отладки
-          head -c 300 events.json
-          echo ""
+               -o neftyanik.json
 
-          # Проверка на ошибку авторизации
-          if grep -q "authorization-header-not-found" events.json || grep -q '"status":"error"' events.json; then
-            echo "API вернул ошибку авторизации!"
-            cat events.json
-            exit 1
-          fi
+          # 2. Скачиваем репертуар ДК «Русь» (спектакли на площадке Нефтяника)
+          curl -s -H "Authorization: Bearer $QT_TOKEN" \
+               -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
+               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationAlias=noyabrsk-dk-rus" \
+               -o rus.json
+
+          # 3. Объединяем оба источника в один общий events.json
+          jq -s '{"status":"success","data":{"events":( (.[0].data.events // {}) * (.[1].data.events // {}) )}}' neftyanik.json rus.json > events.json
+
+          echo "Готово! Первые 200 символов events.json:"
+          head -c 200 events.json
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
