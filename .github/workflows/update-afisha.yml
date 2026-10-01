@@ -21,23 +21,41 @@ jobs:
         env:
           QT_TOKEN: ${{ secrets.QT_API_TOKEN }}
         run: |
-          # 1. Скачиваем репертуар «Нефтяника»
+          # 1. Запрос собственных мероприятий «Нефтяника» (ID 3495)
           curl -s -H "Authorization: Bearer $QT_TOKEN" \
                -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationAlias=noyabrsk-ckii-neftyanik" \
+               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationId=3495" \
                -o neftyanik.json
 
-          # 2. Скачиваем репертуар ДК «Русь» (спектакли на площадке Нефтяника)
+          # 2. Запрос мероприятий ДК «Русь» (организатор 3351: «Старший сын»)
           curl -s -H "Authorization: Bearer $QT_TOKEN" \
                -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationAlias=noyabrsk-dk-rus" \
+               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationId=3351" \
                -o rus.json
 
-          # 3. Объединяем оба источника в один общий events.json
-          jq -s '{"status":"success","data":{"events":( (.[0].data.events // {}) * (.[1].data.events // {}) )}}' neftyanik.json rus.json > events.json
+          # 3. Объединяем события обоих учреждений в общий events.json
+          jq -s '
+            {
+              status: "success",
+              data: {
+                events: (
+                  ((.[0].data.events // .[0].events // {}) ) * 
+                  ((.[1].data.events // .[1].events // {}) )
+                )
+              }
+            }
+          ' neftyanik.json rus.json > events.json
 
-          echo "Готово! Первые 200 символов events.json:"
-          head -c 200 events.json
+          echo "Проверка events.json (первые 300 символов):"
+          head -c 300 events.json
+          echo ""
+
+          # Проверяем, попал ли спектакль в файл
+          if grep -q "221" events.json || grep -q "Старший" events.json; then
+            echo "Успех: Спектакль Старший сын найден в итоговом файле!"
+          else
+            echo "Внимание: Событие e221 пока не найдено во втором запросе."
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
