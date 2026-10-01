@@ -13,49 +13,47 @@ permissions:
 jobs:
   fetch-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_RUNNER_FORCE_ACTIONS_NODE_VERSION: "node24"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Fetch and Merge QuickTickets Events
+      - name: Fetch and Merge All Venue Events
         env:
           QT_TOKEN: ${{ secrets.QT_API_TOKEN }}
         run: |
-          # 1. Запрос собственных мероприятий «Нефтяника» (ID 3495)
+          # 1. Забираем мероприятия Нефтяника (ID 3495)
           curl -s -H "Authorization: Bearer $QT_TOKEN" \
                -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationId=3495" \
+               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationAlias=noyabrsk-ckii-neftyanik" \
                -o neftyanik.json
 
-          # 2. Запрос мероприятий ДК «Русь» (организатор 3351: «Старший сын»)
+          # 2. Забираем мероприятия ДК «Русь» (ID 3351 - репертуар театра, гастроли)
           curl -s -H "Authorization: Bearer $QT_TOKEN" \
                -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationId=3351" \
+               "https://api2.quicktickets.ru/afisha/v2/event/list?organisationAlias=noyabrsk-dk-rus" \
                -o rus.json
 
-          # 3. Объединяем события обоих учреждений в общий events.json
+          # 3. Фильтруем мероприятия ДК «Русь»: берем только те, где площадкой указан Нефтяник (ул. Ленина, 12 или finalOrganisationId 3495), 
+          # либо объединяем все события обоих главных ДК Ноябрьска
           jq -s '
             {
               status: "success",
               data: {
                 events: (
-                  ((.[0].data.events // .[0].events // {}) ) * 
-                  ((.[1].data.events // .[1].events // {}) )
+                  ( (.[0].data.events // .[0].events // {}) ) + 
+                  ( (.[1].data.events // .[1].events // {}) )
                 )
               }
             }
           ' neftyanik.json rus.json > events.json
 
-          echo "Проверка events.json (первые 300 символов):"
-          head -c 300 events.json
-          echo ""
+          echo "Итоговое количество найденных мероприятий:"
+          jq '.data.events | length' events.json
 
-          # Проверяем, попал ли спектакль в файл
-          if grep -q "221" events.json || grep -q "Старший" events.json; then
-            echo "Успех: Спектакль Старший сын найден в итоговом файле!"
-          else
-            echo "Внимание: Событие e221 пока не найдено во втором запросе."
-          fi
+          echo "Список всех подгруженных событий:"
+          jq -r '.data.events[] | "\(.id): \(.name)"' events.json
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
